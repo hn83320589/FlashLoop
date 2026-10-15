@@ -90,6 +90,18 @@ public class BackupServiceTests : IDisposable
     }
 
     [Fact]
+    public void Sample_backup_file_restores()
+    {
+        var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "samples", "backup_example.json"));
+        ServiceFor(_target).Restore(json, RestoreMode.Overwrite);
+
+        var overviews = _target.Decks.GetOverviews();
+        Assert.Equal(["N2 範例", "空的牌組"], overviews.Select(o => o.Deck.Name));
+        Assert.Equal(5, overviews[0].TotalCards);
+        Assert.NotEmpty(_target.Store.GetReviewDates());
+    }
+
+    [Fact]
     public void Invalid_json_is_rejected_and_database_untouched()
     {
         _target.DeckWithCsv("本機牌組", "x,y\n");

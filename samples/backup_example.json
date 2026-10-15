@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "exportedAt": "2026-10-13T13:02:00+00:00",
+  "settings": {
+    "newCardsPerDay": 20,
+    "reviewsPerDay": 100
+  },
+  "decks": [
+    {
+      "guid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "name": "N2 範例",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-10T13:00:00+00:00"
+    },
+    {
+      "guid": "f7440dcf-85bf-4d50-8005-cffcea14ba2d",
+      "name": "空的牌組",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-10T13:00:00+00:00"
+    }
+  ],
+  "cards": [
+    {
+      "guid": "25d77a34-53be-438f-938a-8b60ae7747d8",
+      "deckGuid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "front": "曖昧",
+      "back": "あいまい／模糊不清",
+      "tags": [
+        "N2",
+        "形容動詞"
+      ],
+      "ease": 2.65,
+      "repetitions": 1,
+      "interval": 4,
+      "dueDate": "2026-10-14",
+      "lastReviewedAt": "2026-10-10T13:00:00+00:00",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-10T13:00:00+00:00"
+    },
+    {
+      "guid": "4d009b6a-7e65-4626-8384-ef4fa65bad2a",
+      "deckGuid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "front": "諦める",
+      "back": "あきらめる／放棄",
+      "tags": [
+        "N2",
+        "動詞"
+      ],
+      "ease": 2.35,
+      "repetitions": 2,
+      "interval": 6,
+      "dueDate": "2026-10-18",
+      "lastReviewedAt": "2026-10-12T13:01:45+00:00",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-12T13:01:45+00:00"
+    },
+    {
+      "guid": "6e661936-17fc-43c7-b4dc-3e1454f27f60",
+      "deckGuid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "front": "憧れる",
+      "back": "あこがれる／嚮往",
+      "tags": [
+        "N2",
+        "動詞"
+      ],
+      "ease": 2.65,
+      "repetitions": 1,
+      "interval": 4,
+      "dueDate": "2026-10-14",
+      "lastReviewedAt": "2026-10-10T13:00:30+00:00",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-10T13:00:30+00:00"
+    },
+    {
+      "guid": "49ef251b-9a0d-4d59-89eb-225acbd11c46",
+      "deckGuid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "front": "預ける",
+      "back": "あずける／寄放、託付",
+      "tags": [
+        "N2",
+        "動詞"
+      ],
+      "ease": 2.65,
+      "repetitions": 1,
+      "interval": 4,
+      "dueDate": "2026-10-14",
+      "lastReviewedAt": "2026-10-10T13:00:45+00:00",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-10T13:00:45+00:00"
+    },
+    {
+      "guid": "e24b0c06-6ad0-4440-ba66-b8334ea3018c",
+      "deckGuid": "c6369e4e-28ad-4b78-9f23-de21761ec2cb",
+      "front": "慌ただしい",
+      "back": "あわただしい／匆忙的",
+      "tags": [
+        "N2",
+        "形容詞"
+      ],
+      "ease": 2.5,
+      "repetitions": 2,
+      "interval": 6,
+      "dueDate": "2026-10-17",
+      "lastReviewedAt": "2026-10-11T13:01:30+00:00",
+      "createdAt": "2026-10-10T13:00:00+00:00",
+      "updatedAt": "2026-10-11T13:01:30+00:00"
+    }
+  ],
+  "reviewLogs": [
+    {
+      "guid": "b7ee840c-7c84-4077-8034-7b6fac4c7707",
+      "cardGuid": "25d77a34-53be-438f-938a-8b60ae7747d8",
+      "reviewedAt": "2026-10-10T13:00:00+00:00",
+      "reviewDate": "2026-10-10",
+      "rating": 4,
+      "wasNew": true
+    },
+    {
+      "guid": "eabc0b4e-dfb0-42a6-8c1b-df2bfc20bd6d",
+      "cardGuid": "4d009b6a-7e65-4626-8384-ef4fa65bad2a",
+      "reviewedAt": "2026-10-10T13:00:15+00:00",
+      "reviewDate": "2026-10-10",
+      "rating": 3,
+      "wasNew": true
+    },
+    {
+      "guid": "ce7e906c-8e29-4d58-9829-19870fdba7bf",
+      "cardGuid": "6e661936-17fc-43c7-b4dc-3e1454f27f60",
+      "reviewedAt": "2026-10-10T13:00:30+00:00",
+      "reviewDate": "2026-10-10",
+      "rating": 4,
+      "wasNew": true
+    },
+    {
+      "guid": "be04ee85-4066-4c8a-8720-b4ed9ebe831b",
+      "cardGuid": "49ef251b-9a0d-4d59-89eb-225acbd11c46",
+      "reviewedAt": "2026-10-10T13:00:45+00:00",
+      "reviewDate": "2026-10-10",
+      "rating": 4,
+      "wasNew": true
+    },
+    {
+      "guid": "c0586c13-e578-42e6-b7fa-542312ffdcf2",
+      "cardGuid": "e24b0c06-6ad0-4440-ba66-b8334ea3018c",
+      "reviewedAt": "2026-10-10T13:01:00+00:00",
+      "reviewDate": "2026-10-10",
+      "rating": 3,
+      "wasNew": true
+    },
+    {
+      "guid": "4d3cc525-a1a6-46e0-af2c-471b03b50dce",
+      "cardGuid": "4d009b6a-7e65-4626-8384-ef4fa65bad2a",
+      "reviewedAt": "2026-10-11T13:01:15+00:00",
+      "reviewDate": "2026-10-11",
+      "rating": 2,
+      "wasNew": false
+    },
+    {
+      "guid": "8d2787bf-d1cd-4db5-abf5-38215f91b153",
+      "cardGuid": "e24b0c06-6ad0-4440-ba66-b8334ea3018c",
+      "reviewedAt": "2026-10-11T13:01:30+00:00",
+      "reviewDate": "2026-10-11",
+      "rating": 3,
+      "wasNew": false
+    },
+    {
+      "guid": "e8cb5e34-52ab-4cb9-ae28-6965bd75dbf1",
+      "cardGuid": "4d009b6a-7e65-4626-8384-ef4fa65bad2a",
+      "reviewedAt": "2026-10-12T13:01:45+00:00",
+      "reviewDate": "2026-10-12",
+      "rating": 3,
+      "wasNew": false
+    }
+  ]
+}
