@@ -2,86 +2,76 @@
 
 | 項目 | 內容 |
 |---|---|
-| 測試日期 | 2026-10-15 |
-| 受測版本 | `main` @ `690e0ac`（docs: point CI badge and clone URL at the published GitHub repo） |
+| 測試日期 | 2026-10-15（第 2 版，依審查意見補強後重測） |
+| 受測版本 | `main` @ `b84a57a`（ci: publish per-project test counts in the job summary） |
 | 環境 | Windows 11 Pro 10.0.26200、.NET SDK 9.0.315、時區 UTC+08:00 |
-| CI | GitHub Actions `windows-latest`，[run 38688218972](https://github.com/hn83320589/FlashLoop/actions/runs/38688218972)：success |
+| CI | GitHub Actions `windows-latest`，[run 38708762072](https://github.com/hn83320589/FlashLoop/actions/runs/38708762072)：success（截圖見第 7 節） |
 
 ## 1. 結論
 
 | 類別 | 結果 |
 |---|---|
 | Release 建置 | 0 警告、0 錯誤（`TreatWarningsAsErrors` 開啟） |
-| 單元／整合測試（`dotnet test`） | **116 / 116 通過** |
-| 端到端驗收腳本 | **52 / 52 通過** |
-| 驗收標準 15 條 | 13 條完全驗證通過；#1、#8 的自動化部分通過，另有少數項目需人工確認（見第 6 節） |
+| `FlashLoop.Tests`（單元＋資料層整合） | **130 / 130 通過** |
+| `FlashLoop.App.Tests`（端到端，驅動真正的 MainForm） | **13 / 13 通過** |
+| CI（Windows runner） | 兩個測試專案都在 CI 中執行並通過 |
+| 驗收標準 15 條 | 全部有自動化測試佐證；#1、#3、#8、#12 另有涉及系統對話框與實體鍵盤的項目，需人工確認（見第 6 節） |
 
-沒有發現不符合規格的缺陷。有一項觀察事項列在第 5 節。
+沒有發現不符合規格的缺陷。
 
-## 2. 測試方法
+## 2. 第 2 版的變更
 
-1. **單元／整合測試**：`tests/FlashLoop.Tests`（xUnit），共 116 個案例。時間一律由 `FakeTimeProvider` 控制；資料層測試使用真實的 SQLite 暫存檔，不使用 mock。
-2. **端到端驗收腳本**：一次性的驗收程式（不在 repo 內）。它從**空的資料目錄**開始，建立真實的 `MainForm` 與所有服務，依序執行：
-   - 匯入 `samples/` 中的 CSV；
-   - 以鍵盤完成複習；
-   - 關閉後重開；
-   - 模擬跨日（第 1、2、4 天，跳過第 3 天）；
-   - 備份與還原。
-   每一步都用 **SQL 直接查詢資料庫**，與畫面上顯示的數字比對。
-   - 視窗開在螢幕外，不搶焦點。
-   - 按鍵透過 `ProcessCmdKey` 送入。這和實體鍵盤按鍵在 WinForms 中走同一段處理程式，但不經過作業系統的鍵盤輸入。
-   - 時間由可手動推進的 `TimeProvider` 控制。
+| 審查意見 | 處理 | 新增的測試 |
+|---|---|---|
+| 啟動時設定檔或資料庫損毀 | `Program.Main` 分別攔截兩者的錯誤，讓使用者選「重設」或「離開」（預設離開）。重設時原檔改名為 `<檔名>.<時間>.bak` 保留，資料庫的 journal 一併移走。資料庫被占用（BUSY／LOCKED）時不提供重設 | `DataFileRecoveryTests`（3） |
+| 覆蓋還原前自動備份 | 先匯出目前資料到 `<資料目錄>\backups\before-restore-<時間>.json`，成功後才還原；匯出失敗則不還原。自動備份全部保留、不覆寫 | `BackupServiceTests`（+3）、`BackupArchiveTests`（2）、`BackupFlowTests` |
+| 備份資料一致性 | `BackupValidator` 新增檢查：到期日與最後複習時間要同時有值或同時為空、新卡的 reps 和 interval 為 0、複習過的卡 interval ≥ 1、interval ≤ 36500 | `Validator_requires_due_date_and_last_reviewed_*`、`Validator_rejects_interval_above_maximum` |
+| 排程最大間隔 | interval 上限 36500 天。原本 `interval × ease` 直接轉成 `int`，持續評「簡單」最終會溢位成負數 | `Interval_never_exceeds_maximum`（3）、`Huge_stored_interval_does_not_overflow` |
+| 端到端腳本不在 repo | 改寫成 `tests/FlashLoop.App.Tests`（xUnit），納入 CI | 13 個 |
+| CI 證據 | CI 的 Job Summary 列出各測試專案的通過數；附上截圖 | — |
+
+## 3. 測試方法
+
+1. **單元／整合測試**（`tests/FlashLoop.Tests`）：時間一律由 `FakeTimeProvider` 控制。資料層測試使用真實的 SQLite 暫存檔，不使用 mock。
+2. **端到端測試**（`tests/FlashLoop.App.Tests`）：每個測試從空的暫存資料目錄開始，組裝真實的服務與 `MainForm`。
+   - 視窗開在螢幕外，不取得焦點。
+   - 按鍵透過 `ProcessCmdKey` 送入。這和實體鍵盤在 WinForms 中走同一段處理程式，但不經過作業系統的鍵盤輸入。
+   - 時間由可推進的 `ManualTimeProvider`（固定 UTC+8）控制，本機和 CI 算出相同的日期。
+   - 畫面上的數字都和 **SQL 直接查詢資料庫** 的結果比對。
 3. **靜態檢查**：專案相依、套件授權、網路呼叫，以及是否有直接取用系統時間的程式碼。
 
-## 3. 驗收標準對照
+## 4. 驗收標準對照
 
 | # | 標準 | 判定方式 | 證據 | 結果 |
 |---|---|---|---|---|
-| 1 | 牌組新增、改名、刪除，數量正確，重開後不變 | 實測 | E1-1～E1-6；`DeckPersistenceTests`（6） | 通過\* |
-| 2 | CSV 正確處理逗號、雙引號、換行、有無 BOM | 單元測試 | `CsvParserTests`（13）、`SampleFileTests`；E2-2～E2-7 | 通過 |
-| 3 | 匯入摘要數量正確，錯誤列指出行號與原因 | 單元＋實測 | `CsvImporterTests`（14）；E2-8～E2-12 | 通過 |
+| 1 | 牌組新增、改名、刪除，數量正確，重開後不變 | 實測 | `DeckAndImportFlowTests.Create_rename_delete_and_counts_survive_restart`；`DeckPersistenceTests`（6） | 通過\* |
+| 2 | CSV 正確處理逗號、雙引號、換行、有無 BOM | 單元測試 | `CsvParserTests`（13）、`SampleFileTests`；`DeckAndImportFlowTests.Special_character_sample_keeps_every_field_intact` | 通過 |
+| 3 | 匯入摘要數量正確，錯誤列指出行號與原因 | 單元＋實測 | `CsvImporterTests`（14）；`DeckAndImportFlowTests.Error_sample_summary_*`（含摘要對話框的內容） | 通過\* |
 | 4 | 連續「普通」間隔為 1、6、round(6×ease)… | 單元測試 | `Consecutive_good_follows_1_6_then_interval_times_ease` | 通過 |
-| 5 | 重來／困難／簡單逐條一致，ease ≥ 1.3 | 單元測試（含邊界） | `Sm2SchedulerTests`（26，含 ease 下限 8 個邊界案例）；E3-4、E3-14 | 通過 |
-| 6 | 「重來」的卡同次再出現，評普通以上後不再出現 | 單元測試 | `Again_card_reappears_at_end_until_rated_good_or_better` 等；E3-8～E3-10 | 通過 |
-| 7 | 每日上限生效，超出的卡不遺失、隔天出現 | 單元測試 | `ReviewQueueBuilderTests`（9）；E3-12、E4-3、E5-1～E5-8 | 通過 |
-| 8 | 鍵盤完整操作複習流程 | 實測 | E3-1～E3-3、E3-7、E3-13 | 通過\* |
-| 9 | streak 正確，中斷一天歸零，同日多次只算一天 | 單元測試 | `StreakCalculatorTests`（8）；E4-2、E5-3、E5-5、E5-7、E5-9 | 通過 |
-| 10 | 14 天預測與資料庫實際到期數一致 | 單元＋實測 | `Forecast_matches_raw_due_counts_in_database`；E4-1、E5-10 | 通過 |
-| 11 | Ctrl+Z 後排程欄位與當日統計都還原 | 單元測試 | `Undo_restores_card_row_and_today_statistics_in_database` 等 9 個與撤銷相關的測試；E3-4～E3-7 | 通過 |
-| 12 | JSON 備份完整還原；覆蓋、合併行為正確 | 單元測試 | `BackupMergerTests`（7）、`BackupServiceTests`（6）；E6-1～E6-7 | 通過 |
-| 13 | 核心邏輯至少 25 個測試，`dotnet test` 全過 | 執行測試 | 116 個，全數通過 | 通過 |
-| 14 | README 含建置、截圖、模組、演算法與統計說明 | 檢視 | README 各章節：建置與執行、截圖（7 張）、架構與模組、排程演算法、統計計算方式 | 通過 |
-| 15 | GitHub Actions 在 Windows runner 綠燈，README 有徽章 | 檢視 Actions | run 38688218972 success；README 第 3 行有徽章 | 通過 |
+| 5 | 重來／困難／簡單逐條一致，ease ≥ 1.3 | 單元測試（含邊界） | `Sm2SchedulerTests`（30，含 ease 下限 8 個、間隔上限 4 個邊界案例） | 通過 |
+| 6 | 「重來」的卡同次再出現，評普通以上後不再出現 | 單元測試 | `ReviewSessionTests`；`KeyboardReviewFlowTests.Again_card_returns_at_the_end_and_leaves_after_good` | 通過 |
+| 7 | 每日上限生效，超出的卡不遺失、隔天出現 | 單元測試 | `ReviewQueueBuilderTests`（9）；`MultiDayFlowTests` | 通過 |
+| 8 | 鍵盤完整操作複習流程 | 實測 | `KeyboardReviewFlowTests`（3） | 通過\* |
+| 9 | streak 正確，中斷一天歸零，同日多次只算一天 | 單元測試 | `StreakCalculatorTests`（8）；`MultiDayFlowTests` | 通過 |
+| 10 | 14 天預測與資料庫實際到期數一致 | 單元＋實測 | `Forecast_matches_raw_due_counts_in_database`；`MultiDayFlowTests`（比對畫面上圖表的資料與 SQL） | 通過 |
+| 11 | Ctrl+Z 後排程欄位與當日統計都還原 | 單元測試 | 9 個與撤銷相關的單元測試；`KeyboardReviewFlowTests.Ctrl_Z_restores_the_database_row_and_today_statistics` | 通過 |
+| 12 | JSON 備份完整還原；覆蓋、合併行為正確 | 單元測試 | `BackupMergerTests`（9）、`BackupServiceTests`（9）；`BackupFlowTests`（4） | 通過\* |
+| 13 | 核心邏輯至少 25 個測試，`dotnet test` 全過 | 執行測試 | 143 個，全數通過（附錄 A） | 通過 |
+| 14 | README 含建置、截圖、模組、演算法與統計說明 | 檢視 | 建置與執行、截圖、架構與模組、排程演算法、統計計算方式各有章節 | 通過 |
+| 15 | GitHub Actions 在 Windows runner 綠燈，README 有徽章 | 檢視 Actions | run 38708762072 success；README 第 3 行有徽章；第 7 節截圖 | 通過 |
 
-\* 自動化部分已通過，仍有需要人工確認的項目，請見第 6 節。
+\* 自動化測試已通過；涉及系統對話框或實體鍵盤的部分請見第 6 節。
 
-## 4. 端到端驗收明細
+## 5. 端到端測試的觀察值
 
-初始條件：資料目錄為空，時間設為 2026-10-15 09:00（+08:00），每日上限為預設的新卡 20、複習 100。
+初始條件：資料目錄為空，時間設為 2026-10-15 09:00（+08:00），每日上限為預設的新卡 20、複習 100。以下數值都由測試斷言。
 
-### E1 牌組管理（#1）
+### 牌組與匯入（`DeckAndImportFlowTests`）
 
-| 編號 | 檢查 | 實際結果 |
-|---|---|---|
-| E1-1 | 空資料目錄顯示空狀態提示 | 通過 |
-| E1-2 | 建立同名牌組（大小寫不同）被拒絕 | 「已有名為「n2 基礎」的牌組」 |
-| E1-3 | 改名為空白被拒絕 | 「牌組名稱不可空白」 |
-| E1-4 | 新增 3 個、改名 1 個、刪除 1 個後，列表顯示正確 | `N2 基礎 30/0/20`、`會話 6/0/6`（總數／到期／新卡） |
-| E1-5 | 刪除牌組時連同卡片一起刪除 | 資料庫中該牌組的卡片為 0 張 |
-| E1-6 | 關閉主視窗、重新開啟資料庫後，列表不變 | 與 E1-4 相同 |
-
-### E2 CSV 匯入（#2、#3）
-
-| 編號 | 檔案／檢查 | 實際結果 |
-|---|---|---|
-| E2-1 | `n2_basic.csv` | 新增 30、略過 0、錯誤 0 |
-| E2-2 | `special_bom.csv`（BOM＋CRLF） | 新增 6、錯誤 0 |
-| E2-3～E2-7 | 欄位內逗號、`""` 跳脫、欄位內換行、BOM 未混入欄位、非 BMP 字元、前後空白與標籤整理 | 全部正確 |
-| E2-8～E2-10 | `with_errors.csv` | 新增 4、略過 2、錯誤 6，行號與原因如下表 |
-| E2-11 | 同一檔案重複匯入 | 新增 0、略過 30，原因為「正面「曖昧」已存在於此牌組」 |
-| E2-12 | 匯入摘要對話框 | 顯示三個數量以及每列的行號與原因 |
-
-`with_errors.csv` 的逐列結果：
+- **牌組操作**：新增 3 個、改名 1 個、刪除 1 個後，列表為 `N2 基礎 30/0/20`、`會話 6/0/6`（總數／到期／新卡）。重新啟動後列表不變。
+- **名稱驗證**：同名（大小寫不同）與空白名稱都被拒絕。
+- **`special_bom.csv`**：新增 6 張，逗號、`""` 跳脫、欄位內換行、非 BMP 字元、標籤整理都正確，BOM 沒有混入欄位。
+- **`with_errors.csv`**：新增 4、略過 2、錯誤 6。
 
 | 行號 | 類型 | 原因 |
 |---|---|---|
@@ -94,53 +84,50 @@
 | 11 | 錯誤 | 結尾雙引號後出現多餘字元「後」 |
 | 14 | 錯誤 | 引號未關閉：此行開始的欄位直到檔案結尾都沒有結尾雙引號 |
 
-### E3 鍵盤複習與撤銷（#6、#8、#11）
+### 鍵盤複習（`KeyboardReviewFlowTests`）
 
-| 編號 | 檢查 | 實際結果 |
-|---|---|---|
-| E3-1 | 牌組列表按 Enter 進入複習 | 顯示正面「曖昧」，背面為空 |
-| E3-2 | 未翻面時按 3 | 不評分 |
-| E3-3 | 按空白鍵翻面 | 顯示「あいまい／模糊不清」 |
-| E3-4 | 新卡評「簡單」 | ease 2.5→2.65、reps 0→1、interval 0→4、到期 10/19 |
-| E3-5、E3-6 | 按 Ctrl+Z | 資料庫中的卡片欄位完全回到評分前；今日已複習（5）與評分次數（5）都還原 |
-| E3-7 | 撤銷後 | 回到同一張卡，正面朝上 |
-| E3-8、E3-9 | 第 1 張評「重來」 | 該卡在第 21 次（隊尾）再次出現 |
-| E3-10 | 重來的卡評「普通」後 | 不再出現，本次複習結束 |
-| E3-11 | 檢查整輪順序 | 沒有任何一張卡連續出現 |
-| E3-12 | 新卡上限 20 | 本次共 20 張不同的卡、21 次評分 |
-| E3-13 | 當日總結 | 「複習卡片 20 張（評分 21 次）／重來 1 普通 20／今日累計 20 張／連續 1 天／明天到期 20 張」 |
-| E3-14 | 重來後再評普通 | ease 2.3、reps 1、interval 1（符合規則：重來 −0.2；普通在 reps=0 時 interval=1） |
+- 按 Enter 開始複習，正面顯示「曖昧」、背面為空。未翻面時按 3 不會評分。按空白鍵後顯示「あいまい／模糊不清」。
+- 第一張評「重來」：這張卡在第 21 次（隊尾）再次出現，評「普通」後就不再出現。整輪沒有任何一張卡連續出現。本次共 20 張不同的卡（新卡上限），資料庫中的值為 ease 2.3、reps 1、interval 1。
+- 評分後按 Ctrl+Z：資料庫中的卡片欄位、今日已複習張數、評分次數都回到評分前，並回到同一張卡、正面朝上。
 
-### E4、E5 統計、跨日與上限（#7、#9、#10）
+### 多日情境（`MultiDayFlowTests`）
 
-| 編號 | 時間點 | 檢查 | 實際結果 |
+| 時間點 | 觀察值 |
+|---|---|
+| 第 1 天 | N2 複習 20 張後，「會話」牌組沒有新卡（新卡上限是全域共用）。統計畫面：今日 20 張、連續 1 天，預測圖與 SQL 一致 |
+| 第 2 天（上限改為新 5／複習 15） | 列表為 `N2 基礎 30/15/5`，資料庫實際到期 20 張；10 張新卡仍在；複習前 streak 1，複習後 2；超過複習上限的 5 張保留為逾期 |
+| 第 4 天（跳過第 3 天） | streak 0；列表為 `N2 基礎 30/10/5`（含逾期的卡）；同一天複習兩個牌組後 streak 1；今日 15 張；預測圖與 SQL 一致 |
+
+### 備份（`BackupFlowTests`）
+
+- **覆蓋**：還原後牌組、卡片排程、評分紀錄逐欄位與來源一致，設定也套用備份中的值。`backups\` 中產生了自動備份，用它再做一次覆蓋還原，資料完全回到覆蓋前的狀態。
+- **合併**：保留本機牌組與本機設定，不產生自動備份，同一份備份合併兩次結果不變。
+- **損毀的 JSON**：被拒絕，資料庫不變，也不產生自動備份。
+- **`samples/backup_example.json`**：可以還原。
+
+## 6. 需要人工確認的項目
+
+以下項目涉及系統的強制回應對話框（輸入框、檔案選擇、TaskDialog、MessageBox）或實體鍵盤。自動化測試無法在不搶焦點的情況下操作，請以實機確認：
+
+| # | 操作 | 預期結果 | 結果 |
 |---|---|---|---|
-| E4-1 | 第 1 天 | 預測圖與 SQL 比對 | 兩者皆為 `[0,20,0,0,…]` |
-| E4-2 | 第 1 天 | 統計畫面 | 今日 20 張（21 次評分）、連續 1 天 |
-| E4-3 | 第 1 天 | 新卡上限是否全域共用 | N2 用掉 20 張後，「會話」牌組當天 0 張 |
-| E5-1 | 第 2 天，上限改為新 5／複習 15 | 牌組列表 | `N2 基礎 30/15/5`，資料庫實際到期 20 張 |
-| E5-2 | 第 2 天 | 前一天超過上限的 10 張新卡 | 仍在 |
-| E5-3 | 第 2 天，複習前 | streak | 1（延續昨天） |
-| E5-4、E5-5 | 第 2 天 | 複習 15 張到期＋5 張新卡 | streak = 2 |
-| E5-6 | 第 2 天 | 超過複習上限的 5 張 | 保留為逾期 |
-| E5-7 | 第 4 天（跳過第 3 天） | streak | 0 |
-| E5-8 | 第 4 天 | 逾期卡 | 有出現（`N2 基礎 30/10/5`） |
-| E5-9 | 第 4 天 | 先複習「會話」5 張、再複習 N2 10 張 | streak = 1（同一天兩次只算一天） |
-| E5-10 | 第 4 天 | 預測圖與 SQL 比對 | 兩者皆為 `[0,5,0,0,15,0,10,0,…]` |
+| 1 | Ctrl+N，輸入名稱後按 Enter | 新增牌組並選取該列 | ☐ |
+| 1 | F2 改名、Del 刪除（含確認框） | 列表即時更新；關閉重開後不變 | ☐ |
+| 3 | Ctrl+I，在檔案選擇視窗選 `samples\with_errors.csv` | 摘要對話框與第 5 節一致 | ☐ |
+| 8 | 用實體鍵盤完成一輪複習：Enter → 空白鍵 → 1～4 → Ctrl+Z → 結束後按 Enter | 全程不需滑鼠 | ☐ |
+| 8 | 複習中按 Esc | 出現確認框，取消後可繼續 | ☐ |
+| 12 | 「備份」選單 → 匯出 → 還原，分別選「覆蓋」與「合併」 | 覆蓋完成的訊息顯示自動備份位置；合併不產生自動備份 | ☐ |
+| — | 關閉程式，把 `settings.json` 內容改成 `{ broken` 後啟動 | 出現「重設／離開」；選重設後產生 `.bak`，以預設上限開啟 | ☐ |
+| — | 關閉程式，把 `flashloop.db` 內容改成任意文字後啟動 | 出現「重設／離開」；選重設後產生 `.bak`，開啟空白資料庫 | ☐ |
 
-### E6 備份與還原（#12）
+最後兩項建議用 `FLASHLOOP_DATA_DIR` 指到測試用的資料夾，以免動到真正的資料：
 
-| 編號 | 檢查 | 實際結果 |
-|---|---|---|
-| E6-1 | 匯出後，覆蓋還原到另一個已有資料的資料庫 | 牌組、卡片排程、複習紀錄逐欄位與來源一致，原有資料被清除 |
-| E6-2 | 覆蓋還原的設定 | 套用備份中的上限（5／15） |
-| E6-3 | 合併還原 | 保留「本機牌組 1」，並加入「N2 基礎 30」、「會話 6」 |
-| E6-4 | 合併還原的設定 | 保留本機設定 |
-| E6-5 | 同一份備份合併兩次 | 結果不變 |
-| E6-6 | 損毀的 JSON | 被拒絕（`InvalidDataException`），資料庫完全不變 |
-| E6-7 | `samples/backup_example.json` | 可還原（N2 範例 5 張、空的牌組 0 張） |
+```powershell
+$env:FLASHLOOP_DATA_DIR = "$env:TEMP\flashloop-manual"
+dotnet run --project src/FlashLoop.App
+```
 
-## 5. 靜態檢查與交付物
+## 7. 靜態檢查與 CI
 
 | 項目 | 結果 |
 |---|---|
@@ -149,29 +136,41 @@
 | 不呼叫外部網路 | `src`、`tests` 中沒有 `HttpClient`、`WebRequest`、`Socket` 或 URL |
 | 時間可控 | 沒有直接使用 `DateTime.Now`／`UtcNow`／`Today`，一律透過 `TimeProvider` |
 | 資料位置 | `%LocalAppData%\FlashLoop\`（可用 `FLASHLOOP_DATA_DIR` 覆寫） |
-| 範例資料 | 3 個 CSV＋1 份 JSON 備份，皆有測試驗證 |
-| CI | `windows-latest`、`setup-dotnet` 9.0.x，並上傳 trx 測試結果 |
+| CI | `windows-latest`、`setup-dotnet` 9.0.x；Restore → Build → Test → Test summary → Upload trx，全部成功 |
 
-**觀察事項（非缺陷）**：牌組列表每一列的「今日新卡」各自顯示全域剩餘額度。例如第 2 天兩個牌組都顯示 5，但全域當天只剩 5 張新卡的額度，先複習的牌組會用掉它。這符合「上限為全域、不分牌組」的假設，但加總後可能讓使用者誤以為今天能學 10 張新卡。是否要調整顯示方式，請客戶決定。
+CI run 38708762072 的頁面截圖：
 
-## 6. 需要人工確認的項目
+![CI 綠燈](screenshots/08-ci-actions.png)
 
-以下項目涉及作業系統的強制回應對話框或實體鍵盤，自動化腳本無法在不搶焦點的情況下操作，因此未涵蓋：
+GitHub 的執行 log 和 Job Summary 需要登入才能查看。以下證據不需要登入就能從公開 API 取得：
 
-| # | 操作 | 預期結果 | 結果 |
-|---|---|---|---|
-| 1 | Ctrl+N，輸入名稱後按 Enter | 新增牌組並選取該列 | ☐ |
-| 1 | F2 改名、Del 刪除（含確認框） | 列表即時更新；關閉重開後不變 | ☐ |
-| 3 | Ctrl+I，在檔案選擇視窗選 `samples\with_errors.csv` | 摘要對話框與第 4 節一致 | ☐ |
-| 8 | 用實體鍵盤完成一輪複習：Enter → 空白鍵 → 1～4 → Ctrl+Z → 結束後按 Enter | 全程不需滑鼠 | ☐ |
-| 8 | 複習中按 Esc | 出現確認框，取消後可繼續 | ☐ |
-| 12 | 「備份」選單 → 匯出 → 還原，分別選「覆蓋」與「合併」 | 行為與 E6 一致 | ☐ |
+- Jobs API 顯示 Test、Test summary 等每個步驟的 conclusion 都是 success。
+- 上傳的 trx 產物從單一測試專案時的 24.8 KB 增加為 31.5 KB，與多出第二個測試專案的結果檔相符。
 
-## 7. 重現方式
+CI 執行的是 `dotnet test FlashLoop.sln`，任何一個測試專案失敗，這一步都會失敗。
+
+CI 頁面上有一則 Node.js 20 deprecation 警告，來自 `actions/checkout@v4` 等官方 action。它不影響建置結果，本次沒有處理。
+
+## 附錄 A：本機 `dotnet test` 輸出
+
+```text
+> dotnet build FlashLoop.sln -c Release --no-incremental
+    0 個警告
+    0 個錯誤
+
+> dotnet test FlashLoop.sln -c Release --no-build
+D:\workspace\FlashLoop\tests\FlashLoop.Tests\bin\Release\net9.0\FlashLoop.Tests.dll 的測試回合 (.NETCoreApp,Version=v9.0)
+D:\workspace\FlashLoop\tests\FlashLoop.App.Tests\bin\Release\net9.0-windows\FlashLoop.App.Tests.dll 的測試回合 (.NETCoreApp,Version=v9.0)
+VSTest 版本 17.14.1 (x64)
+正在啟動測試執行，請稍候...
+總共有 1 個測試檔案與指定的模式相符。
+已通過! - 失敗:     0，通過:   130，略過:     0，總計:   130，持續時間: 2 s - FlashLoop.Tests.dll (net9.0)
+已通過! - 失敗:     0，通過:    13，略過:     0，總計:    13，持續時間: 5 s - FlashLoop.App.Tests.dll (net9.0)
+```
+
+## 附錄 B：重現方式
 
 ```powershell
 dotnet build FlashLoop.sln -c Release
 dotnet test FlashLoop.sln -c Release --no-build
 ```
-
-端到端驗收腳本是這次一次性撰寫的，沒有放進 repo。

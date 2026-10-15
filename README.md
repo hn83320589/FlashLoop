@@ -84,7 +84,8 @@ FlashLoop.sln
 ├─ src/FlashLoop.Core   (net9.0)          純邏輯：排程、CSV、複習流程、統計、備份、服務層、Repository 介面
 ├─ src/FlashLoop.Data   (net9.0)          SQLite（Microsoft.Data.Sqlite）與 settings.json 實作
 ├─ src/FlashLoop.App    (net9.0-windows)  WinForms：MainForm + UserControls
-└─ tests/FlashLoop.Tests (xUnit)          Core 單元測試 + Data 整合測試（暫存 SQLite 檔）
+├─ tests/FlashLoop.Tests     (xUnit)      Core 單元測試 + Data 整合測試（暫存 SQLite 檔）
+└─ tests/FlashLoop.App.Tests (xUnit)      端到端測試：驅動真正的 MainForm（net9.0-windows）
 ```
 
 依賴方向為 `App → Core ← Data`。Core 不引用 WinForms 或 SQLite，只定義介面；`Program.cs` 是唯一組裝的地方（手動注入，不使用 DI container）。
@@ -95,7 +96,7 @@ FlashLoop.sln
 | `Csv` | `CsvParser`、`CsvImporter`、`CardText` | RFC 4180 解析（保留每筆 record 的起始行號）、驗證、去重、摘要 |
 | `Review` | `ReviewQueueBuilder`、`ReviewSession`、`DailyUsage` | 依上限建佇列；重來重排；撤銷堆疊 |
 | `Stats` | `StreakCalculator`、`ForecastCalculator` | 連續天數、14 天預測 |
-| `Backup` | `BackupService`、`BackupMerger`、`BackupValidator`、`BackupSerializer` | JSON 匯出／驗證／覆蓋／合併 |
+| `Backup` | `BackupService`、`BackupMerger`、`BackupValidator`、`BackupSerializer`、`IBackupArchive` | JSON 匯出／驗證／覆蓋／合併；覆蓋前自動備份 |
 | `Services` | `DeckService`、`ImportService`、`ReviewService`、`StatsService` | 給 UI 呼叫的應用層 |
 | `Persistence` | `IDeckRepository`、`ICardRepository`、`IReviewLogRepository`、`ISettingsStore` | 由 Data 實作的介面 |
 
@@ -143,6 +144,7 @@ review_logs (id, guid UNIQUE, card_id → cards ON DELETE CASCADE, reviewed_at, 
 - `round` 一律採四捨五入（`MidpointRounding.AwayFromZero`）。.NET 預設的銀行家捨入會把 `round(12.5)` 算成 12。
 - ease 每次運算後保留兩位小數，避免 `2.5 − 0.2 = 2.3000000000000003` 這類浮點誤差累積。
 - 範例：新卡連續評「普通」的間隔為 1 → 6 → 15 → 38 → 95（`round(6×2.5)=15`、`round(15×2.5)=round(37.5)=38`）。
+- **間隔上限 36500 天（約 100 年）**：規格沒有訂上限，這是額外加的。間隔乘上 ease 沒有上界，連續評「簡單」最終會超出 `int` 範圍，變成負數間隔；所以先在 `double` 範圍內套用上限再轉型。實際使用碰不到這個值，也不影響上表的任何數列。
 
 ### 本次複習中的「重來」
 
@@ -171,9 +173,12 @@ review_logs (id, guid UNIQUE, card_id → cards ON DELETE CASCADE, reviewed_at, 
 
 ## 備份與還原
 
-備份檔裡的關聯一律以 `guid` 表示，和資料庫 Id 無關，所以可以跨機器還原。還原前會先完整驗證（版本、guid 重複、關聯是否存在、同牌組正面重複、數值範圍）。驗證失敗時資料庫完全不會變動。
+備份檔裡的關聯一律以 `guid` 表示，和資料庫 Id 無關，所以可以跨機器還原。還原前會先完整驗證，驗證失敗時資料庫完全不會變動。檢查項目包括：
 
-- **覆蓋**：在一個 transaction 內清空後寫入備份內容，並套用備份中的每日上限設定。
+- 版本、guid 重複、關聯是否存在、同牌組正面重複、數值範圍。
+- 排程欄位彼此一致：到期日與最後複習時間必須同時有值或同時為空；新卡的 repetitions、interval 為 0；複習過的卡 interval 至少 1 天；interval 不超過 36500 天。
+
+- **覆蓋**：先把目前資料自動匯出到 `<資料目錄>\backups\before-restore-yyyyMMdd-HHmmss.json`（全部保留、不覆寫），成功後才在一個 transaction 內清空並寫入備份內容，再套用備份中的每日上限設定。自動備份失敗時不會還原。完成訊息會顯示自動備份的位置，要回到覆蓋前的狀態，只要再以「覆蓋」還原這個檔案。
 - **合併**：在記憶體中計算合併結果，再以同樣的 transaction 寫入。
   - 牌組、卡片以 guid 對應，兩邊都有時取 `updated_at` 較晚者（時間相同時保留本機）。
   - 不同 guid 但同名的牌組會都保留，後加入的名稱加上「 (2)」。
@@ -182,29 +187,53 @@ review_logs (id, guid UNIQUE, card_id → cards ON DELETE CASCADE, reviewed_at, 
   - 本機設定保留不變。
   - 合併結果可重複套用（idempotent）。
 
+## 啟動時的資料損毀處理
+
+`Program.Main` 對設定檔與資料庫的初始化分別處理錯誤，讓使用者選擇「重設」或「離開」（預設為離開）：
+
+| 情況 | 重設的行為 |
+|---|---|
+| `settings.json` 格式錯誤或內容無效 | 原檔改名為 `settings.json.<時間>.bak`，改用預設上限；牌組與進度不受影響 |
+| `flashloop.db` 無法開啟（例如檔案損毀） | 原檔連同 SQLite journal 改名為 `flashloop.db.<時間>.bak`，建立新的空白資料庫；可再從備份還原 |
+| 資料庫被其他程式占用（BUSY／LOCKED） | 不提供重設（檔案本身沒壞），只提示關閉其他視窗 |
+
+損毀的檔案一律改名保留、不刪除，事後仍可救回或交給開發者分析。改名邏輯在 `DataFileRecovery`，有測試涵蓋。
+
 ## 測試
 
 ```powershell
 dotnet test
 ```
 
-共 116 個測試案例，對應驗收標準：
+共 143 個測試案例：`FlashLoop.Tests` 130 個（Core 單元測試、Data 整合測試），`FlashLoop.App.Tests` 13 個（端到端）。
+
+端到端測試在暫存資料目錄中啟動真正的 `MainForm`：
+
+- 視窗開在螢幕外、不取得焦點。
+- 按鍵透過 `ProcessCmdKey` 送入，和實體鍵盤在 WinForms 中走同一段處理。
+- 每一步都以 SQL 直接查詢資料庫，再和畫面上的數字比對。
+- UI 的內部控制項以 reflection 取得，畫面結構改變時，`AppHarness` 要跟著調整。
+
+驗收標準對應的測試：
 
 | # | 標準 | 主要測試 |
 |---|---|---|
-| 1 | 牌組 CRUD、統計、重開後不變 | `DeckPersistenceTests` |
-| 2 | CSV 逗號／雙引號／換行、有無 BOM | `CsvParserTests`、`SampleFileTests` |
-| 3 | 匯入摘要數量、錯誤行號與原因 | `CsvImporterTests`、`SampleFileTests` |
+| 1 | 牌組 CRUD、統計、重開後不變 | `DeckPersistenceTests`、`DeckAndImportFlowTests.Create_rename_delete_and_counts_survive_restart` |
+| 2 | CSV 逗號／雙引號／換行、有無 BOM | `CsvParserTests`、`SampleFileTests`、`DeckAndImportFlowTests.Special_character_sample_*` |
+| 3 | 匯入摘要數量、錯誤行號與原因 | `CsvImporterTests`、`SampleFileTests`、`DeckAndImportFlowTests.Error_sample_summary_*` |
 | 4 | 連續普通 1、6、round(6×ease)… | `Sm2SchedulerTests.Consecutive_good_follows_1_6_then_interval_times_ease` |
 | 5 | 重來／困難／簡單逐條、ease 下限 | `Sm2SchedulerTests`（含邊界 Theory） |
-| 6 | 重來重新出現、普通以上不再出現 | `ReviewSessionTests` |
-| 7 | 每日上限、隔天出現 | `ReviewQueueBuilderTests` |
-| 9 | 連續天數 | `StreakCalculatorTests`、`ReviewPersistenceTests.Streak_*` |
-| 10 | 14 天預測與資料庫一致 | `ForecastCalculatorTests`、`ReviewPersistenceTests.Forecast_matches_raw_due_counts_in_database` |
-| 11 | Ctrl+Z 還原排程與當日統計 | `ReviewSessionTests.Undo_*`、`ReviewPersistenceTests.Undo_*` |
-| 12 | JSON 備份覆蓋與合併 | `BackupServiceTests`、`BackupMergerTests` |
+| 6 | 重來重新出現、普通以上不再出現 | `ReviewSessionTests`、`KeyboardReviewFlowTests.Again_card_returns_*` |
+| 7 | 每日上限、隔天出現 | `ReviewQueueBuilderTests`、`MultiDayFlowTests` |
+| 8 | 鍵盤完整操作複習流程 | `KeyboardReviewFlowTests` |
+| 9 | 連續天數 | `StreakCalculatorTests`、`ReviewPersistenceTests.Streak_*`、`MultiDayFlowTests` |
+| 10 | 14 天預測與資料庫一致 | `ForecastCalculatorTests`、`ReviewPersistenceTests.Forecast_*`、`MultiDayFlowTests`（比對畫面上的圖表） |
+| 11 | Ctrl+Z 還原排程與當日統計 | `ReviewSessionTests.Undo_*`、`ReviewPersistenceTests.Undo_*`、`KeyboardReviewFlowTests.Ctrl_Z_*` |
+| 12 | JSON 備份覆蓋與合併 | `BackupServiceTests`、`BackupMergerTests`、`BackupFlowTests` |
 
-CI（`.github/workflows/ci.yml`）在 `windows-latest` 上以 .NET 9.0.x 執行 restore、build、test。
+CI（`.github/workflows/ci.yml`）在 `windows-latest` 上以 .NET 9.0.x 執行 restore、build、test，並在 Job Summary 列出各測試專案的通過數。完整的驗收紀錄見 [`docs/test-report.md`](docs/test-report.md)。
+
+![CI 綠燈](docs/screenshots/08-ci-actions.png)
 
 ## 設計取捨
 
