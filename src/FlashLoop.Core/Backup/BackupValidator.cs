@@ -65,6 +65,7 @@ public static class BackupValidator
             {
                 Fail($"卡片 {c.Guid} 的排程數值無效（ease ≥ {CardSchedule.MinEase}、repetitions 與 interval ≥ 0）");
             }
+            ValidateScheduleConsistency(c);
         }
 
         var logGuids = new HashSet<Guid>();
@@ -82,6 +83,28 @@ public static class BackupValidator
             {
                 Fail($"評分紀錄 {l.Guid} 的評分 {l.Rating} 無效（應為 1 到 4）");
             }
+        }
+    }
+
+    // 新卡（從未評分）沒有到期日；評分過的卡一定有到期日與至少 1 天的間隔。
+    // 兩個欄位不一致的卡片會被佇列與統計誤判為新卡或到期卡，因此在寫入前擋下。
+    private static void ValidateScheduleConsistency(BackupCard c)
+    {
+        if (c.DueDate is null != c.LastReviewedAt is null)
+        {
+            Fail($"卡片 {c.Guid} 的到期日與最後複習時間必須同時有值或同時為空");
+        }
+        if (c.LastReviewedAt is null && (c.Repetitions != 0 || c.Interval != 0))
+        {
+            Fail($"卡片 {c.Guid} 尚未複習過（新卡），repetitions 與 interval 應為 0");
+        }
+        if (c.LastReviewedAt is not null && c.Interval < 1)
+        {
+            Fail($"卡片 {c.Guid} 已複習過，間隔應至少 1 天");
+        }
+        if (c.Interval > Sm2Scheduler.MaxInterval)
+        {
+            Fail($"卡片 {c.Guid} 的間隔 {c.Interval} 天超過上限 {Sm2Scheduler.MaxInterval} 天");
         }
     }
 

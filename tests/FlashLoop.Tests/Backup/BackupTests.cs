@@ -217,6 +217,36 @@ public class BackupMergerTests
     }
 
     [Fact]
+    public void Validator_requires_due_date_and_last_reviewed_to_be_set_together()
+    {
+        var reviewed = Card(Guid.NewGuid(), "x", 0);
+        var newCard = reviewed with { Repetitions = 0, Interval = 0, DueDate = null, LastReviewedAt = null };
+        BackupValidator.Validate(Doc([Deck(DeckA, "A")], [reviewed]));
+        BackupValidator.Validate(Doc([Deck(DeckA, "A")], [newCard]));
+
+        AssertRejected(reviewed with { DueDate = null }, "到期日");
+        AssertRejected(reviewed with { LastReviewedAt = null }, "到期日");
+        AssertRejected(newCard with { Repetitions = 2 }, "新卡");
+        AssertRejected(newCard with { Interval = 3 }, "新卡");
+        AssertRejected(reviewed with { Interval = 0 }, "間隔");
+    }
+
+    [Fact]
+    public void Validator_rejects_interval_above_maximum()
+    {
+        var card = Card(Guid.NewGuid(), "x", 0);
+        BackupValidator.Validate(Doc([Deck(DeckA, "A")], [card with { Interval = Sm2Scheduler.MaxInterval }]));
+
+        AssertRejected(card with { Interval = Sm2Scheduler.MaxInterval + 1 }, $"{Sm2Scheduler.MaxInterval}");
+    }
+
+    private static void AssertRejected(BackupCard card, string expectedInMessage)
+    {
+        var ex = Assert.Throws<InvalidDataException>(() => BackupValidator.Validate(Doc([Deck(DeckA, "A")], [card])));
+        Assert.Contains(expectedInMessage, ex.Message);
+    }
+
+    [Fact]
     public void Serializer_roundtrips_document()
     {
         var doc = Doc([Deck(DeckA, "A")], [Card(Guid.NewGuid(), "前\n面,\"x\"", 0)]) with
