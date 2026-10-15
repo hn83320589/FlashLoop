@@ -1,6 +1,6 @@
 # FlashLoop 單字卡間隔複習器
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/hn83320589/FlashLoop/actions/workflows/ci.yml/badge.svg)](https://github.com/hn83320589/FlashLoop/actions/workflows/ci.yml)
 
 為通勤、睡前零碎時間背單字設計的 Windows 桌面小工具。匯入 CSV 單字表後，每天只推送「今天該看」的卡片，排程採 SM-2 變體演算法，全程可只用鍵盤操作。
 
@@ -37,7 +37,7 @@
 需求：Windows 10/11、[.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)。
 
 ```powershell
-git clone https://github.com/OWNER/REPO.git
+git clone https://github.com/hn83320589/FlashLoop.git
 cd FlashLoop
 dotnet build FlashLoop.sln -c Release
 dotnet test FlashLoop.sln -c Release
