@@ -63,6 +63,15 @@ public class CsvImporterTests
         Assert.Equal(1, result.Summary.Skipped);
         Assert.Equal("貓", result.NewCards[0].Back);
         Assert.Equal(2, result.Summary.SkippedRows[0].LineNumber);
+        Assert.Contains("第 1 行", result.Summary.SkippedRows[0].Reason);
+    }
+
+    [Fact]
+    public void Skip_reason_for_existing_card_mentions_deck()
+    {
+        var existing = new HashSet<string> { "cat" };
+        var result = CsvImporter.Analyze("Cat,貓\n", existing);
+        Assert.Contains("牌組", result.Summary.SkippedRows[0].Reason);
     }
 
     [Fact]

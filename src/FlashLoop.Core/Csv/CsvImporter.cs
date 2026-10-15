@@ -33,7 +33,7 @@ public static class CsvImporter
         var cards = new List<ImportedCard>();
         var skipped = new List<ImportIssue>();
         var errors = new List<ImportIssue>();
-        var seenKeys = new HashSet<string>(existingFrontKeys, StringComparer.Ordinal);
+        var linesByKey = new Dictionary<string, int>(StringComparer.Ordinal); // 檔案內已出現的 key → 行號
         var isFirstContentRow = true;
 
         foreach (var row in CsvParser.Parse(text))
@@ -64,11 +64,18 @@ public static class CsvImporter
             }
 
             var front = row.Fields[0].Trim();
-            if (!seenKeys.Add(CardText.FrontKey(front)))
+            var key = CardText.FrontKey(front);
+            if (existingFrontKeys.Contains(key))
             {
                 skipped.Add(new ImportIssue(row.LineNumber, $"正面「{front}」已存在於此牌組"));
                 continue;
             }
+            if (linesByKey.TryGetValue(key, out var firstLine))
+            {
+                skipped.Add(new ImportIssue(row.LineNumber, $"正面「{front}」與檔案第 {firstLine} 行重複"));
+                continue;
+            }
+            linesByKey[key] = row.LineNumber;
 
             var tags = row.Fields.Count > 2 ? CardText.ParseTags(row.Fields[2]) : [];
             cards.Add(new ImportedCard(row.LineNumber, front, row.Fields[1].Trim(), tags));
