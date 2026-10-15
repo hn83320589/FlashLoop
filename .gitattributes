@@ -1,0 +1,3 @@
+* text=auto
+# 範例 CSV 需保留原始位元組（BOM、欄位內換行）
+*.csv -text
