@@ -25,7 +25,7 @@ static class Program
             new ImportService(store, time),
             new ReviewService(store, store, store, settings, time),
             new StatsService(store, store, time),
-            new BackupService(store, settings, time),
+            new BackupService(store, settings, new BackupArchive(AppPaths.BackupsDirectory), time),
             settings,
             time);
 

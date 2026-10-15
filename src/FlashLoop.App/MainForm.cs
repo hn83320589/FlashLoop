@@ -188,7 +188,8 @@ public sealed class MainForm : Form
         {
             Caption = "還原備份",
             Heading = "選擇還原方式",
-            Text = "覆蓋：清空目前所有牌組與進度，完全以備份內容取代（包含每日上限設定）。\n\n" +
+            Text = "覆蓋：清空目前所有牌組與進度，完全以備份內容取代（包含每日上限設定）。" +
+                   "覆蓋前會自動將目前資料備份到資料夾內的 backups。\n\n" +
                    "合併：保留目前資料並加入備份內容；同一張卡片或牌組以較晚更新者為準。",
             Icon = TaskDialogIcon.Information,
             Buttons = { overwrite, merge, TaskDialogButton.Cancel },
@@ -208,8 +209,9 @@ public sealed class MainForm : Form
 
         try
         {
-            _services.Backup.Restore(File.ReadAllText(dialog.FileName), mode);
-            MessageBox.Show(this, "還原完成。", "還原備份", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            var archivedPath = _services.Backup.Restore(File.ReadAllText(dialog.FileName), mode);
+            var message = archivedPath is null ? "還原完成。" : $"還原完成。\n\n覆蓋前的資料已自動備份到：\n{archivedPath}";
+            MessageBox.Show(this, message, "還原備份", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
         {

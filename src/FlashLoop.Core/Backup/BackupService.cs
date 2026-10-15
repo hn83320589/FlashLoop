@@ -12,7 +12,7 @@ public enum RestoreMode
     Merge,
 }
 
-public sealed class BackupService(IBackupStore store, ISettingsStore settings, TimeProvider time)
+public sealed class BackupService(IBackupStore store, ISettingsStore settings, IBackupArchive archive, TimeProvider time)
 {
     public string Export()
     {
@@ -25,8 +25,11 @@ public sealed class BackupService(IBackupStore store, ISettingsStore settings, T
         return BackupSerializer.Serialize(doc);
     }
 
-    /// <summary>還原備份。格式或內容有誤時丟出 InvalidDataException，且不會變更任何資料。</summary>
-    public void Restore(string json, RestoreMode mode)
+    /// <summary>
+    /// 還原備份。格式或內容有誤時丟出 InvalidDataException，且不會變更任何資料。
+    /// 覆蓋模式會先把目前資料存進 archive，回傳其位置；存檔失敗則不還原。合併模式回傳 null。
+    /// </summary>
+    public string? Restore(string json, RestoreMode mode)
     {
         var incoming = BackupSerializer.Deserialize(json);
         BackupValidator.Validate(incoming);
@@ -34,18 +37,19 @@ public sealed class BackupService(IBackupStore store, ISettingsStore settings, T
         switch (mode)
         {
             case RestoreMode.Overwrite:
+                var archivedPath = archive.Save(Export(), time.GetUtcNow());
                 store.ReplaceAll(incoming);
                 if (incoming.Settings is { } s)
                 {
                     settings.SaveLimits(new DailyLimits(s.NewCardsPerDay, s.ReviewsPerDay));
                 }
-                break;
+                return archivedPath;
 
             case RestoreMode.Merge:
                 var merged = BackupMerger.Merge(store.ExportAll(), incoming);
                 BackupValidator.Validate(merged);
                 store.ReplaceAll(merged);
-                break;
+                return null;
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, null);

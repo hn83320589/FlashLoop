@@ -16,4 +16,7 @@ public static class AppPaths
     public static string DatabaseFile => Path.Combine(DataDirectory, "flashloop.db");
 
     public static string SettingsFile => Path.Combine(DataDirectory, "settings.json");
+
+    /// <summary>覆蓋還原前自動產生的備份。</summary>
+    public static string BackupsDirectory => Path.Combine(DataDirectory, "backups");
 }

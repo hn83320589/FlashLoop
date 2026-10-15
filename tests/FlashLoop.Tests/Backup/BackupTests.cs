@@ -16,7 +16,9 @@ public class BackupServiceTests : IDisposable
         _target.Dispose();
     }
 
-    private static BackupService ServiceFor(TestDatabase db) => new(db.Store, db.Settings, db.Time);
+    private readonly RecordingArchive _archive = new();
+
+    private BackupService ServiceFor(TestDatabase db) => new(db.Store, db.Settings, _archive, db.Time);
 
     private static string Normalized(BackupDocument doc) =>
         BackupSerializer.Serialize(doc with { ExportedAt = DateTimeOffset.UnixEpoch, Settings = null });
@@ -111,6 +113,68 @@ public class BackupServiceTests : IDisposable
         Assert.Throws<InvalidDataException>(() => ServiceFor(_target).Restore("""{"version":99}""", RestoreMode.Overwrite));
 
         Assert.Equal(before, Normalized(_target.Store.ExportAll()));
+    }
+
+    [Fact]
+    public void Overwrite_archives_current_data_before_replacing_it()
+    {
+        SeedSource();
+        _target.Settings.SaveLimits(new DailyLimits(3, 30));
+        _target.DeckWithCsv("本機牌組", "x,y\n");
+        var localBefore = ServiceFor(_target).Export();
+
+        var archivedPath = ServiceFor(_target).Restore(ServiceFor(_source).Export(), RestoreMode.Overwrite);
+
+        var (json, at) = Assert.Single(_archive.Saved);
+        Assert.Equal(localBefore, json);
+        Assert.Equal(_target.Time.GetUtcNow(), at);
+        Assert.Equal(_archive.LastPath, archivedPath);
+
+        // 自動備份本身可以完整還原回覆蓋前的狀態
+        ServiceFor(_target).Restore(json, RestoreMode.Overwrite);
+        Assert.Contains(_target.Decks.GetOverviews(), o => o.Deck.Name == "本機牌組");
+        Assert.Equal(new DailyLimits(3, 30), _target.Settings.LoadLimits());
+    }
+
+    [Fact]
+    public void Overwrite_is_aborted_when_archiving_fails()
+    {
+        SeedSource();
+        _target.DeckWithCsv("本機牌組", "x,y\n");
+        var before = Normalized(_target.Store.ExportAll());
+        _archive.FailWith = new IOException("磁碟已滿");
+
+        var ex = Assert.Throws<IOException>(() => ServiceFor(_target).Restore(ServiceFor(_source).Export(), RestoreMode.Overwrite));
+
+        Assert.Equal("磁碟已滿", ex.Message);
+        Assert.Equal(before, Normalized(_target.Store.ExportAll()));
+    }
+
+    [Fact]
+    public void Merge_and_invalid_backup_do_not_archive()
+    {
+        SeedSource();
+        Assert.Null(ServiceFor(_target).Restore(ServiceFor(_source).Export(), RestoreMode.Merge));
+        Assert.Throws<InvalidDataException>(() => ServiceFor(_target).Restore("{ not json", RestoreMode.Overwrite));
+        Assert.Empty(_archive.Saved);
+    }
+
+    private sealed class RecordingArchive : IBackupArchive
+    {
+        public List<(string Json, DateTimeOffset At)> Saved { get; } = [];
+        public string? LastPath { get; private set; }
+        public Exception? FailWith { get; set; }
+
+        public string Save(string json, DateTimeOffset at)
+        {
+            if (FailWith is not null)
+            {
+                throw FailWith;
+            }
+            Saved.Add((json, at));
+            LastPath = $"archive-{Saved.Count}.json";
+            return LastPath;
+        }
     }
 
     private sealed class StatsComparer : IEqualityComparer<Core.Services.StatsSnapshot>
