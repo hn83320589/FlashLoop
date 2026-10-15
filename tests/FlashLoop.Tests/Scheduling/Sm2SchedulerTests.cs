@@ -174,4 +174,27 @@ public class Sm2SchedulerTests
         Assert.Equal(1.3, s.Ease);
         Assert.Equal(1, s.Interval);
     }
+
+    [Theory]
+    [InlineData(Rating.Hard)]
+    [InlineData(Rating.Good)]
+    [InlineData(Rating.Easy)]
+    public void Interval_never_exceeds_maximum(Rating rating)
+    {
+        // 間隔已接近上限時，乘上 ease 或係數不得超過上限，也不得因 int 溢位變成負數
+        var s = new CardSchedule(10.0, 50, Sm2Scheduler.MaxInterval - 1, Today);
+        for (var i = 0; i < 3; i++)
+        {
+            s = Sm2Scheduler.Apply(s, rating, Today);
+            Assert.Equal(Sm2Scheduler.MaxInterval, s.Interval);
+            Assert.Equal(Today.AddDays(Sm2Scheduler.MaxInterval), s.DueDate);
+        }
+    }
+
+    [Fact]
+    public void Huge_stored_interval_does_not_overflow()
+    {
+        var s = new CardSchedule(2.5, 5, int.MaxValue / 2, Today);
+        Assert.Equal(Sm2Scheduler.MaxInterval, Sm2Scheduler.Apply(s, Rating.Easy, Today).Interval);
+    }
 }
