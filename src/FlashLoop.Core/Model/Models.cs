@@ -22,6 +22,16 @@ public sealed record Card
     public bool IsNew => LastReviewedAt is null;
 
     public bool IsDueOn(DateOnly day) => !IsNew && Schedule.DueDate is { } due && due <= day;
+
+    // record 預設以參考比較集合，這裡讓 Tags 以內容比較，Card 才有完整的值語意
+    public bool Equals(Card? other) =>
+        other is not null
+        && Id == other.Id && Guid == other.Guid && DeckId == other.DeckId
+        && Front == other.Front && Back == other.Back && Tags.SequenceEqual(other.Tags)
+        && Schedule == other.Schedule && LastReviewedAt == other.LastReviewedAt
+        && CreatedAt == other.CreatedAt && UpdatedAt == other.UpdatedAt;
+
+    public override int GetHashCode() => HashCode.Combine(Id, Guid, Schedule, UpdatedAt);
 }
 
 /// <summary>一次評分紀錄。ReviewDate 為評分當下的本地日期，用於每日統計與連續天數。</summary>
